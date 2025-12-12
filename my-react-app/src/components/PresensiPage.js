@@ -1,188 +1,227 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import Webcam from "react-webcam";
 import axios from "axios";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import icon from "leaflet/dist/images/marker-icon.png";
+import iconShadow from "leaflet/dist/images/marker-shadow.png";
 
-// NOTE: jika marker default tidak muncul karena masalah icon di build, kita bisa
-// menambahkan override icon di file index.js. Aku tidak paksa di sini supaya tetap sederhana.
+
+L.Marker.prototype.options.icon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconRetinaUrl: icon,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41],
+});
 
 function PresensiPage() {
-  const [coords, setCoords] = useState(null);
-  const [error, setError] = useState(null);
-  const [loadingLocation, setLoadingLocation] = useState(true);
-  const [loadingAction, setLoadingAction] = useState(false);
-  const [message, setMessage] = useState(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    // ambil lokasi saat komponen mount
-    if (!navigator.geolocation) {
-      setError("Geolocation tidak didukung oleh browser ini.");
-      setLoadingLocation(false);
+  const [coords, setCoords] = useState(null); // {lat, lng}
+  const [isLoading, setIsLoading] = useState(true);
+  const [image, setImage] = useState(null); // State untuk menyimpan hasil foto
+  const webcamRef = useRef(null);
+
+  const capture = useCallback(() => {
+    const imageSrc = webcamRef.current.getScreenshot();
+
+    if (!imageSrc) {
+      console.log("GAGAL CAPTURE: webcam belum ready");
+      setError("Gagal mengambil foto. Coba ulangi.");
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setError(null);
-        setLoadingLocation(false);
-      },
-      (err) => {
-        setError("Gagal mendapatkan lokasi: " + err.message);
-        setLoadingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  }, []);
+    setImage(imageSrc);
+  }, [webcamRef]);
 
-  const getAuthConfig = () => {
-    const token = localStorage.getItem("token");
-    return {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-    };
+  const getToken = () => {
+    return localStorage.getItem("token");
   };
 
+  const getLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+          setIsLoading(false);
+        },
+        (error) => {
+          setError("Gagal mendapatkan lokasi: " + error.message);
+          setIsLoading(false);
+        }
+      );
+    } else {
+      setError("Geolocation tidak didukung oleh browser ini.");
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    getLocation();
+  }, []);
+
   const handleCheckIn = async () => {
-    setMessage(null);
-    setError(null);
     if (!coords) {
       setError("Lokasi belum didapatkan. Mohon izinkan akses lokasi.");
       return;
     }
-
-    setLoadingAction(true);
-    try {
-      const response = await axios.post(
-        "http://localhost:3001/api/presensi/check-in",
-        {
-          latitude: coords.lat,
-          longitude: coords.lng,
-        },
-        getAuthConfig()
-      );
-
-      setMessage({
-        type: "success",
-        text: response.data?.message || "Check-in berhasil",
-      });
-    } catch (err) {
-      console.error(err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Gagal melakukan check-in.";
-      setError(msg);
-    } finally {
-      setLoadingAction(false);
+    if (!image) {
+      setError("Anda harus mengambil foto sebelum Check-In.");
+      return;
     }
-  };
+      try {
+        setError("");
+        setMessage("Sedang memproses Check-In...");
+        
+        const blob = await (await fetch(image)).blob();
+    
+        const formData = new FormData();
+        formData.append("latitude", coords.lat);
+        formData.append("longitude", coords.lng);
+        formData.append("buktiFoto", blob, "selfie.jpg"); 
+    
+        const response = await axios.post(
+          "http://localhost:3001/api/presensi/check-in",
+          formData,
+          { headers: { Authorization: `Bearer ${getToken()}` } }
+        );
+    
+        setMessage(response.data.message);
+        setImage(null); 
+      } catch (err) {
+        setMessage("");
+        setError(err.response ? err.response.data.message : "Check-in gagal. Pastikan kamera dan lokasi diizinkan.");
+      }
+    };
 
   const handleCheckOut = async () => {
-    setMessage(null);
-    setError(null);
-    setLoadingAction(true);
+    setError("");
+    setMessage("Sedang memproses Check-Out...");
+
     try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+        },
+      };
+
       const response = await axios.post(
         "http://localhost:3001/api/presensi/check-out",
         {},
-        getAuthConfig()
+        config
       );
 
-      setMessage({
-        type: "success",
-        text: response.data?.message || "Check-out berhasil",
-      });
+      setMessage(response.data.message);
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || "Gagal melakukan check-out.");
-    } finally {
-      setLoadingAction(false);
+      setMessage("");
+      setError(err.response ? err.response.data.message : "Check-out gagal");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-10">
-      <div className="max-w-6xl mx-auto px-4 pt-6">
-        <h1 className="text-2xl font-semibold text-gray-800 mb-4">Presensi Lokasi</h1>
-
-        {/* Peta Card */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
-          <div style={{ height: 320, width: "100%" }}>
-            {coords ? (
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center pt-10 pb-10">
+        {isLoading ? (
+          <div className="bg-white p-10 rounded-lg shadow-md w-full max-w-6xl mb-8 text-center">
+            <p className="text-xl font-semibold text-blue-600 animate-pulse">
+              Memuat Peta dan Mendeteksi Lokasi...
+            </p>
+            {error && <p className="text-red-600 mt-4">{error}</p>}
+          </div>
+        ) : (
+          <div className="bg-white p-4 rounded-lg shadow-md w-full mb-8 px-8 max-w-6xl">
+            <h3 className="text-xl font-semibold mb-2">Lokasi Terdeteksi:</h3>
+            <div className="my-4 border rounded-lg overflow-hidden">
               <MapContainer
                 center={[coords.lat, coords.lng]}
                 zoom={15}
-                style={{ height: "100%", width: "100%" }}
+                style={{ height: "300px", width: "100%" }}
               >
                 <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution="&copy; OpenStreetMap contributors"
                 />
                 <Marker position={[coords.lat, coords.lng]}>
                   <Popup>Lokasi Presensi Anda</Popup>
                 </Marker>
               </MapContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                {loadingLocation ? "Mencari lokasi..." : "Lokasi tidak tersedia"}
-              </div>
-            )}
+            </div>
           </div>
+        )}
+      
+        <div className="my-4 border rounded-lg overflow-hidden bg-black w-full max-w-6xl">
+          {image ? (
+            <img src={image} alt="Selfie" className="w-full" />
+          ) : (
+            <Webcam
+              audio={false}
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              className="w-full"
+              mirrored={true} // <--- DIUBAH MENJADI TRUE AGAR KAMERA MIRROR
+              videoConstraints={{
+                width: 1280,
+                height: 720,
+                facingMode: "user",
+                }}
+                // MENGHAPUS STYLE TRANSFORM scaleX(1) JIKA TIDAK DIPERLUKAN, 
+                // TETAPI DI SINI SAYA UBAH MENJADI scaleX(-1) UNTUK MEMASTIKAN MIRROR BERFUNGSI
+                style={{ transform: "scaleX(-1)" }} 
+            />
+          )}
         </div>
-
-        {/* Card Kontrol */}
-        <div className="max-w-md mx-auto">
-          <div className="bg-white rounded-xl shadow-lg p-6 text-center">
-            <h2 className="text-xl font-bold mb-2">Lakukan Presensi</h2>
-
-            {/* status message */}
-            {message && (
-              <div
-                className={`mb-3 text-sm px-3 py-2 rounded ${
-                  message.type === "success"
-                    ? "bg-green-50 text-green-700"
-                    : "bg-yellow-50 text-yellow-700"
-                }`}
-              >
-                {message.text}
-              </div>
-            )}
-
-            {error && (
-              <div className="mb-3 text-sm px-3 py-2 rounded bg-red-50 text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="text-sm text-gray-600 mb-4">
-              <p>Latitude: <span className="font-medium">{coords?.lat ?? "-"}</span></p>
-              <p>Longitude: <span className="font-medium">{coords?.lng ?? "-"}</span></p>
-            </div>
-
-            <div className="flex items-center justify-center gap-4">
-              <button
-                onClick={handleCheckIn}
-                disabled={loadingAction}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm disabled:opacity-60"
-              >
-                {loadingAction ? "Memproses..." : "Check In"}
-              </button>
-
-              <button
-                onClick={handleCheckOut}
-                disabled={loadingAction}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm disabled:opacity-60"
-              >
-                {loadingAction ? "Memproses..." : "Check Out"}
-              </button>
-            </div>
+      
+        <div className="mb-4 w-full max-w-6xl flex justify-center"> 
+          {!image ? (
+            <button
+              onClick={capture}
+              className="bg-blue-500 text-white px-4 py-2 rounded" 
+            >
+              Ambil Foto
+            </button>
+          ) : (
+            <button
+              onClick={() => setImage(null)}
+              className="bg-gray-500 text-white px-4 py-2 rounded"
+            >
+              Foto Ulang
+            </button>
+          )}
+        </div>
+      
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md text-center">
+          <h2 className="text-3xl font-bold mb-6 text-gray-800">
+            Lakukan Presensi
+          </h2>
+      
+          {message && <p className="text-green-600 mb-4">{message}</p>}
+          {error && <p className="text-red-600 mb-4">{error}</p>}
+      
+          <div className="flex space-x-4">
+            <button
+              onClick={handleCheckIn}
+              className="w-full py-3 px-4 bg-green-600 text-white font-semibold rounded-md shadow-sm hover:bg-green-700"
+            >
+              Check-In
+            </button>
+      
+            <button
+              onClick={handleCheckOut}
+              className="w-full py-3 px-4 bg-red-600 text-white font-semibold rounded-md shadow-sm hover:bg-red-700"
+            >
+              Check-Out
+            </button>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-export default PresensiPage;
+    );
+  }
+  
+  export default PresensiPage;
