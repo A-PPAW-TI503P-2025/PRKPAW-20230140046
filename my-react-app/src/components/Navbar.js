@@ -74,7 +74,17 @@ function Navbar() {
               </Link>
             )}
           </div>
-
+          
+          {/* Link Monitoring Baru */}
+            <Link
+              to="/monitoring"
+              className={`px-6 py-2.5 rounded-full font-medium transition-all ${
+              isActive("/monitoring") ? activeClass : inactiveClass
+              }`}
+            >
+              Monitoring Sensor
+            </Link>
+            
           <div className="hidden md:flex items-center space-x-4">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-md">
@@ -125,6 +135,7 @@ function Navbar() {
             <Link to="/attendance" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3 rounded-full font-medium">
               Presensi
             </Link>
+            <Link to="/monitoring" className="...">Monitoring Suhu</Link>
             {user.role === "admin" && (
               <Link to="/reports" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3 rounded-full font-medium">
                 Laporan Admin

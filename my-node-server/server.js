@@ -51,3 +51,7 @@ app.use("/api/auth", authRoutes);
 app.listen(PORT, () => {
     console.log(`Express server running at http://localhost:${PORT}/`);
 });
+
+const iotRoutes = require('./routes/iot');
+// ...
+app.use('/api/iot', iotRoutes); // Ini yang membuat URL menjadi /api/iot/...

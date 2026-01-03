@@ -7,6 +7,7 @@ import PresensiPage from "./components/PresensiPage";
 import ReportPage from "./components/ReportPage";
 import Navbar from "./components/Navbar";
 import "leaflet/dist/leaflet.css";
+import SensorPage from './components/SensorPage';
 
 const MainLayout = ({ children }) => {
   return (
@@ -16,6 +17,11 @@ const MainLayout = ({ children }) => {
     </div>
   );
 };
+
+// ... import SensorPage ...
+// Di dalam MainLayout:
+<Route path="/monitoring" element={<SensorPage />} />
+
 
 function App() {
   return (
