@@ -3,6 +3,7 @@
 
 ## 2. tampilan halaman SensorLog
 ![alt text](suhu.jpg)
+
 ![alt text](kelembaban.jpg)
 
 ## 3. Tabel Database SensorLogs
