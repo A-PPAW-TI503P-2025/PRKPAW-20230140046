@@ -18,10 +18,6 @@ const MainLayout = ({ children }) => {
   );
 };
 
-// ... import SensorPage ...
-// Di dalam MainLayout:
-<Route path="/monitoring" element={<SensorPage />} />
-
 
 function App() {
   return (
@@ -33,6 +29,8 @@ function App() {
         <Route path="/attendance" element={<MainLayout><PresensiPage /></MainLayout>} />
         <Route path="/reports" element={<MainLayout><ReportPage /></MainLayout>} />
         <Route path="/" element={<LoginPage />} />
+        <Route path="/monitoring" element={<SensorPage />} />
+
       </Routes>
     </Router>
   );
